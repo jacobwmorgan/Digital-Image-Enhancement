@@ -31,46 +31,32 @@ int main(int argc, char** argv) {
 	}
 
 	cimg::exception_mode(0);
+	string userCommand;
+	int bin_count;
+	std::cout << "Enter number of bins | 256 for 8-bit" << std::endl;
+		
+	while (true)
+	{
+		getline(std::cin, userCommand);
+		if (userCommand == "")
+		{
+			std::cout << "PLease enter a number " << std::endl;
+			continue;
+		}
+		try { bin_count = std::stoi(userCommand); }
+		catch (...) { std::cout << "Please enter a number" << std::endl; continue; }
+		
+		if (bin_count >= 0 && bin_count <= 256) { break; }
+		else { std::cout << "Input a number between 0-256" << std::endl; continue; }
+	}
+
 
 	//detect any potential exceptions
 	try {
-		string userCommand;
-		int bin_count;
-		std::cout << "Enter number of bins | 256 for 8-bit" << std::endl;
-		
-		while (true)
-		{
-			getline(std::cin, userCommand);
-			if (userCommand == "")
-			{
-				std::cout << "PLease enter a number " << std::endl;
-				continue;
-			}
-			try { bin_count = std::stoi(userCommand); }
-			catch (...) { std::cout << "Please enter a number" << std::endl; continue; }
-		
-			if (bin_count >= 0 && bin_count <= 256) { break; }
-			else { std::cout << "Input a number between 0-256" << std::endl; continue; }
-		}
-
-
-
-
-
-
-
-
-
-
-
 		
 		CImg<unsigned char> image_input(image_filename.c_str());
 		CImgDisplay disp_input(image_input, "input");
 		const int IMAGE_SIZE = image_input.size();
-
-		std::vector<int> Histogram(bin_count); //histogram, set to size of number of bins
-
-		size_t local_size = Histogram.size(); //
 
 
 
@@ -102,39 +88,118 @@ int main(int argc, char** argv) {
 		}
 
 		//Histogram Code
+		typedef int type;
+		std::vector<type> Histogram(bin_count); //histogram, set to size of number of bins
 
-		std::vector<int> int_histogram_buffer(Histogram.size());
-		size_t int_hist_size = int_histogram_buffer.size() * sizeof(int);
+		size_t local_size = Histogram.size() * sizeof(type); //
 
+
+		//Setting histogram bin size based on bin size variable
+		// 
 		//Device Buffers
 		cl::Buffer device_image_input(context, CL_MEM_READ_ONLY, image_input.size());
 		cl::Buffer device_image_output(context, CL_MEM_READ_WRITE, image_input.size());
+		//Histogram buffer
+		cl::Buffer device_int_histogram(context, CL_MEM_READ_WRITE, local_size);
+		cl::Buffer device_cumulative_histogram_output(context, CL_MEM_READ_WRITE, local_size);
+		cl::Buffer device_LUT_output(context, CL_MEM_READ_WRITE, local_size);
+
+
+		//Copy images to buffer
+		queue.enqueueWriteBuffer(device_image_input, CL_TRUE, 0, image_input.size(), &image_input.data()[0]);
+
+
+		// Setup and execute the kernel (i.e. device code)
+		cl::Kernel kernel = cl::Kernel(program, "identity");
+		kernel.setArg(0, device_image_input);
+		kernel.setArg(1, device_image_output);
+
+
+		//-------------------------------------------------------------------------------------------
+		//Creates a frequency histogrm all pixel values 0-255
+		cl::Kernel kernel_simple_histogram = cl::Kernel(program, "int_hist");
+		kernel_simple_histogram.setArg(0, device_image_input);
+		kernel_simple_histogram.setArg(1, device_int_histogram);
 		
-		cl::Buffer int_histogram(context, CL_MEM_READ_WRITE, int_hist_size* sizeof(int));
+		cl::Event hist_event;
+		queue.enqueueNDRangeKernel(kernel_simple_histogram, cl::NullRange, cl::NDRange(image_input.size()), cl::NullRange, NULL, &hist_event);
+		queue.enqueueReadBuffer(device_int_histogram, CL_TRUE, 0, local_size, &Histogram[0]);
 
-		cl::Event event_one;
-		cl::Event event_two;
-		cl::Event event_three;
-		cl::Event event_four;
+		//-------------------------------------------------------------------------------------------
+		//Cumulative histogram 
+		std::vector<type> CumHistogram(bin_count);																	
+		queue.enqueueFillBuffer(device_cumulative_histogram_output, 0, 0, local_size);
 
-		queue.enqueueWriteBuffer(device_image_input, CL_TRUE, 0, image_input.size(), &image_input.data()[0], NULL, &event_one);
-		queue.enqueueWriteBuffer(device_image_input, CL_TRUE, 0, image_input.size(), &image_input.data()[0], NULL, &event_two);
-		queue.enqueueWriteBuffer(device_image_input, CL_TRUE, 0, image_input.size(), &image_input.data()[0], NULL, &event_three);
-		queue.enqueueWriteBuffer(device_image_input, CL_TRUE, 0, image_input.size(), &image_input.data()[0], NULL, &event_four);
+		cl::Kernel kernel_cumulative_histogram = cl::Kernel(program, "cum_hist");
+		kernel_cumulative_histogram.setArg(0, device_int_histogram);
+		kernel_cumulative_histogram.setArg(1, device_cumulative_histogram_output);
+
+		cl::Event cumulative_hist_event;
+
+		queue.enqueueNDRangeKernel(kernel_cumulative_histogram, cl::NullRange, cl::NDRange(local_size), cl::NullRange, NULL, &cumulative_hist_event);
+		queue.enqueueReadBuffer(device_cumulative_histogram_output, CL_TRUE, 0, local_size, &CumHistogram[0]);
+
+		//------------------------------------------------------------------------------------------
+		//Look up table 
+
+		std::vector<type> LUT(bin_count);
+
+		queue.enqueueFillBuffer(device_LUT_output,0,0,local_size);
+
+		cl::Kernel kernel_LUT = cl::Kernel(program, "hist_lut");
+		kernel_LUT.setArg(0, device_cumulative_histogram_output);
+		kernel_LUT.setArg(1, device_LUT_output);
+
+		cl::Event lut_event;
+
+		queue.enqueueNDRangeKernel(kernel_LUT, cl::NullRange, cl::NDRange(local_size), cl::NullRange, NULL, &lut_event);
+		queue.enqueueReadBuffer(device_LUT_output, CL_TRUE, 0, local_size , &LUT[0]);
+
+		//------------------------------------------------------------------------------------------
+		//Back projection
+
+		cl::Kernel kernel_back_projection = cl::Kernel(program, "back_proj");
+		kernel_back_projection.setArg(0, device_image_input);
+		kernel_back_projection.setArg(1, device_LUT_output);
+		kernel_back_projection.setArg(2, device_image_output);
+
+		cl::Event back_projection_event;
+
+		vector<unsigned char> output_buffer(image_input.size());
+		queue.enqueueNDRangeKernel(kernel_back_projection, cl::NullRange, cl::NDRange(image_input.size()), cl::NullRange, NULL, &back_projection_event);
+
+		queue.enqueueReadBuffer(device_image_output, CL_TRUE, 0, output_buffer.size(), &output_buffer.data()[0]);
+		//------------------------------------------------------------------------------------------
+		//Outputs
+
+		std::cout << std::endl;
+		std::cout << "Histogram: " << Histogram << std::endl;
+		std::cout << "Histogram kernel execution time [ns]: " << hist_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - hist_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "Histogram memory transfer: " << GetFullProfilingInfo(hist_event, ProfilingResolution::PROF_US) << std::endl << std::endl;;
+
+		std::cout << "Cumulative Histogram: " << CumHistogram << std::endl;
+		std::cout << "Cumulative Histogram kernel execution time [ns]: " << cumulative_hist_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - cumulative_hist_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "Cumulative Histogram memory transfer: " << GetFullProfilingInfo(cumulative_hist_event, ProfilingResolution::PROF_US) << std::endl << std::endl;;
 
 
-
-		
-
-
-
+		std::cout << "Look-up table (LUT): " << LUT << std::endl;
+		std::cout << "LUT kernel execution time [ns]: " << lut_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - lut_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "LUT memory transfer: " << GetFullProfilingInfo(lut_event, ProfilingResolution::PROF_US) << std::endl << std::endl;;
 
 
+		std::cout << "Vector kernel execution time [ns]: " << back_projection_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - back_projection_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "Vector memory transfer: " << GetFullProfilingInfo(back_projection_event, ProfilingResolution::PROF_US) << std::endl;
 
+		//Image output
+		CImg<unsigned char> output_image(output_buffer.data(), image_input.width(), image_input.height(), image_input.depth(), image_input.spectrum());
+		CImgDisplay disp_output(output_image, "output");
 
-
-
-
+		while (!disp_input.is_closed() && !disp_output.is_closed()
+			&& !disp_input.is_keyESC() && !disp_output.is_keyESC())
+		{
+			disp_input.wait(1);
+			disp_input.wait(1);
+		}
 	}
 	catch (const cl::Error& err) {
 		std::cerr << "ERROR: " << err.what() << ", " << getErrorString(err.err()) << std::endl;
