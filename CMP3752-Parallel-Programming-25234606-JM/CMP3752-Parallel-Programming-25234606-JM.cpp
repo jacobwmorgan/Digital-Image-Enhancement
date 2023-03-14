@@ -87,7 +87,7 @@ int main(int argc, char** argv) {
 
 
 		const int IMAGE_SIZE = image_input.size();
-
+		const int MAX_INTESITY = 255;
 
 		//3.1 Select computing devices
 		cl::Context context = GetContext(platform_id, device_id);
@@ -146,13 +146,19 @@ int main(int argc, char** argv) {
 
 		//-------------------------------------------------------------------------------------------
 		//Creates a frequency histogrm all pixel values 0-255
+
+		double bin_size = (MAX_INTESITY + 1) / bin_count;
+
 		cl::Kernel kernel_simple_histogram = cl::Kernel(program, "int_hist");
 		kernel_simple_histogram.setArg(0, device_image_input);
 		kernel_simple_histogram.setArg(1, device_int_histogram);
+		kernel_simple_histogram.setArg(2, bin_size);
 		
 		cl::Event hist_event;
 		queue.enqueueNDRangeKernel(kernel_simple_histogram, cl::NullRange, cl::NDRange(image_input.size()), cl::NullRange, NULL, &hist_event);
 		queue.enqueueReadBuffer(device_int_histogram, CL_TRUE, 0, local_size, &Histogram[0]);
+
+		std::cout << "Histogram done" << std::endl;
 
 		//-------------------------------------------------------------------------------------------
 		//Cumulative histogram 
@@ -168,6 +174,7 @@ int main(int argc, char** argv) {
 		queue.enqueueNDRangeKernel(kernel_cumulative_histogram, cl::NullRange, cl::NDRange(local_size), cl::NullRange, NULL, &cumulative_hist_event);
 		queue.enqueueReadBuffer(device_cumulative_histogram_output, CL_TRUE, 0, local_size, &CumHistogram[0]);
 
+		std::cout << "cum Histogram done" << std::endl;
 		//------------------------------------------------------------------------------------------
 		//Look up table 
 
@@ -178,11 +185,14 @@ int main(int argc, char** argv) {
 		cl::Kernel kernel_LUT = cl::Kernel(program, "hist_lut");
 		kernel_LUT.setArg(0, device_cumulative_histogram_output);
 		kernel_LUT.setArg(1, device_LUT_output);
+		kernel_LUT.setArg(2, bin_count);
 
 		cl::Event lut_event;
 
 		queue.enqueueNDRangeKernel(kernel_LUT, cl::NullRange, cl::NDRange(local_size), cl::NullRange, NULL, &lut_event);
 		queue.enqueueReadBuffer(device_LUT_output, CL_TRUE, 0, local_size , &LUT[0]);
+
+		std::cout << "LUT DONE" << std::endl;
 
 		//------------------------------------------------------------------------------------------
 		//Back projection
@@ -191,6 +201,7 @@ int main(int argc, char** argv) {
 		kernel_back_projection.setArg(0, device_image_input);
 		kernel_back_projection.setArg(1, device_LUT_output);
 		kernel_back_projection.setArg(2, device_image_output);
+		kernel_back_projection.setArg(3, bin_size);
 
 		cl::Event back_projection_event;
 
@@ -198,6 +209,7 @@ int main(int argc, char** argv) {
 		queue.enqueueNDRangeKernel(kernel_back_projection, cl::NullRange, cl::NDRange(image_input.size()), cl::NullRange, NULL, &back_projection_event);
 
 		queue.enqueueReadBuffer(device_image_output, CL_TRUE, 0, output_buffer.size(), &output_buffer.data()[0]);
+		std::cout << "BACK DONE" << std::endl;
 		//------------------------------------------------------------------------------------------
 		//Outputs
 
