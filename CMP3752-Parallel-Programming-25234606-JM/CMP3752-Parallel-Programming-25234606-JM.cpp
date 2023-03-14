@@ -34,7 +34,8 @@ int main(int argc, char** argv) {
 	string userCommand;
 	int bin_count;
 	std::cout << "Enter number of bins | 256 for 8-bit" << std::endl;
-		
+	//---------------------------------------------------------------------------------
+	//Menu
 	while (true)
 	{
 		getline(std::cin, userCommand);
@@ -54,10 +55,38 @@ int main(int argc, char** argv) {
 	//detect any potential exceptions
 	try {
 		
-		CImg<unsigned char> image_input(image_filename.c_str());
-		CImgDisplay disp_input(image_input, "input");
-		const int IMAGE_SIZE = image_input.size();
+		CImg<unsigned char> image_input;
 
+
+
+		CImg<unsigned char> temp_image(image_filename.c_str());
+		CImg<unsigned char> cb, cr;
+
+		CImgDisplay disp_input(temp_image, "input");
+		bool is_RGB = false;
+		if (temp_image.spectrum() == 1)
+		{
+			std::cout << "Gray scale image" << std::endl;
+			image_input = temp_image;
+			is_RGB = false;
+		}
+		else if (temp_image.spectrum() == 3)
+		{
+			std::cout << "RGB image" << std::endl;
+			is_RGB = true;
+
+			CImg<unsigned char> Ycbcr_Image = temp_image.get_RGBtoYCbCr();
+
+			image_input = Ycbcr_Image.get_channel(0);
+			cb = Ycbcr_Image.get_channel(1);
+			cr = Ycbcr_Image.get_channel(2);
+		}
+
+
+
+
+
+		const int IMAGE_SIZE = image_input.size();
 
 
 		//3.1 Select computing devices
@@ -91,7 +120,7 @@ int main(int argc, char** argv) {
 		typedef int type;
 		std::vector<type> Histogram(bin_count); //histogram, set to size of number of bins
 
-		size_t local_size = Histogram.size() * sizeof(type); //
+		size_t local_size = Histogram.size() * sizeof(type); 
 
 
 		//Setting histogram bin size based on bin size variable
@@ -127,7 +156,7 @@ int main(int argc, char** argv) {
 
 		//-------------------------------------------------------------------------------------------
 		//Cumulative histogram 
-		std::vector<type> CumHistogram(bin_count);																	
+		std::vector<type> CumHistogram(bin_count);												
 		queue.enqueueFillBuffer(device_cumulative_histogram_output, 0, 0, local_size);
 
 		cl::Kernel kernel_cumulative_histogram = cl::Kernel(program, "cum_hist");
@@ -191,7 +220,28 @@ int main(int argc, char** argv) {
 		std::cout << "Vector memory transfer: " << GetFullProfilingInfo(back_projection_event, ProfilingResolution::PROF_US) << std::endl;
 
 		//Image output
+
 		CImg<unsigned char> output_image(output_buffer.data(), image_input.width(), image_input.height(), image_input.depth(), image_input.spectrum());
+		//RGB Output handling
+		if (is_RGB == true)
+		{
+			CImg<unsigned char> RGBImg = output_image.get_resize(temp_image.width(),temp_image.height(),temp_image.depth(), temp_image.spectrum());
+			for (int x = 0; x < temp_image.width(); x++)
+			{
+				for (int y = 0; y < temp_image.height(); y++)
+				{
+					RGBImg(x, y, 0) = output_image(x, y);
+					RGBImg(x, y, 1) = cb(x, y);
+					RGBImg(x, y, 2) = cr(x, y);
+				}
+			}
+			
+			output_image = RGBImg.get_YCbCrtoRGB();
+		}
+		
+		
+		
+		
 		CImgDisplay disp_output(output_image, "output");
 
 		while (!disp_input.is_closed() && !disp_output.is_closed()
