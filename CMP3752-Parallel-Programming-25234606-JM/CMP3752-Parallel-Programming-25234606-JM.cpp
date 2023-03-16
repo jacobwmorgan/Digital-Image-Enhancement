@@ -17,10 +17,10 @@ void print_help() {
 }
 
 int main(int argc, char** argv) {
-	//Part 1 - handle command line options such as device selection, verbosity, etc.
+	
 	int platform_id = 0;
 	int device_id = 0;
-	string image_filename = "test.pgm";
+	string image_filename = "test.pgm"; //Image name that is being read in (Can be changed in the options)
 
 	for (int i = 1; i < argc; i++) {
 		if ((strcmp(argv[i], "-p") == 0) && (i < (argc - 1))) { platform_id = atoi(argv[++i]); }
@@ -32,10 +32,10 @@ int main(int argc, char** argv) {
 
 	cimg::exception_mode(0);
 	string userCommand;
-	int bin_count;
+	int bin_count; // This is the amount of bins Il be using for the standard histogram, this will effect the amount of colours etc in the output image, as normalisation takes place.
 	std::cout << "Enter number of bins | 256 for 8-bit" << std::endl;
 	//---------------------------------------------------------------------------------
-	//Menu
+	//Menu for asking how many bins 
 	while (true)
 	{
 		getline(std::cin, userCommand);
@@ -55,16 +55,17 @@ int main(int argc, char** argv) {
 	//detect any potential exceptions
 	try {
 		
-		CImg<unsigned char> image_input;
+		CImg<unsigned char> image_input; 
 
 
 
-		CImg<unsigned char> temp_image(image_filename.c_str());
-		CImg<unsigned char> cb, cr;
+		CImg<unsigned char> temp_image(image_filename.c_str()); //A temporary storage for the image , as if RGB is used , I will need this image later on to input into the changed image, so i can put the colour back into the image
+		CImg<unsigned char> cb, cr; //These are the two channels for blue and read in the YCbCr image type
 
 		CImgDisplay disp_input(temp_image, "input");
-		bool is_RGB = false;
+		bool is_RGB = false; //This is to check later on if i need to put the colours back in or not
 		if (temp_image.spectrum() == 1)
+		
 		{
 			std::cout << "Gray scale image" << std::endl;
 			image_input = temp_image;
