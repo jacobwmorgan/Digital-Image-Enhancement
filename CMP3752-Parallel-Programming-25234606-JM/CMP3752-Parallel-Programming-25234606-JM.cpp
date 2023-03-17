@@ -64,21 +64,22 @@ int main(int argc, char** argv) {
 
 		CImgDisplay disp_input(temp_image, "input");
 		bool is_RGB = false; //This is to check later on if i need to put the colours back in or not
-		if (temp_image.spectrum() == 1)
+		if (temp_image.spectrum() == 1) // spectrum() Checks how many channels there are in the image (Greyscale has one)
 		
 		{
+			//This doesnt really do anything but set the image we want to use as the temp image
 			std::cout << "Gray scale image" << std::endl;
 			image_input = temp_image;
 			is_RGB = false;
 		}
-		else if (temp_image.spectrum() == 3)
+		else if (temp_image.spectrum() == 3) // (RGB has 3)
 		{
 			std::cout << "RGB image" << std::endl;
 			is_RGB = true;
 
-			CImg<unsigned char> Ycbcr_Image = temp_image.get_RGBtoYCbCr();
-
-			image_input = Ycbcr_Image.get_channel(0);
+			CImg<unsigned char> Ycbcr_Image = temp_image.get_RGBtoYCbCr(); //Converts the RGB image into a YCbCr image. YCbCr is preferred as it is designed for digital images
+			
+			image_input = Ycbcr_Image.get_channel(0); //
 			cb = Ycbcr_Image.get_channel(1);
 			cr = Ycbcr_Image.get_channel(2);
 		}
@@ -118,17 +119,17 @@ int main(int argc, char** argv) {
 		}
 
 		//Histogram Code
-		typedef int type;
+		typedef int type; //Creating my own type here I can track the size of it later on
 		std::vector<type> Histogram(bin_count); //histogram, set to size of number of bins
 
-		size_t local_size = Histogram.size() * sizeof(type); 
+		size_t local_size = Histogram.size() * sizeof(type); //Gets the size in bytes
 
 
-		//Setting histogram bin size based on bin size variable
-		// 
+		//Setting histogram bin size based the size of the image
 		//Device Buffers
 		cl::Buffer device_image_input(context, CL_MEM_READ_ONLY, image_input.size());
 		cl::Buffer device_image_output(context, CL_MEM_READ_WRITE, image_input.size());
+
 		//Histogram buffer
 		cl::Buffer device_int_histogram(context, CL_MEM_READ_WRITE, local_size);
 		cl::Buffer device_cumulative_histogram_output(context, CL_MEM_READ_WRITE, local_size);
@@ -140,7 +141,7 @@ int main(int argc, char** argv) {
 
 
 		// Setup and execute the kernel (i.e. device code)
-		cl::Kernel kernel = cl::Kernel(program, "identity");
+		cl::Kernel kernel = cl::Kernel(program, "identity"); //Displays the input image
 		kernel.setArg(0, device_image_input);
 		kernel.setArg(1, device_image_output);
 
@@ -148,26 +149,26 @@ int main(int argc, char** argv) {
 		//-------------------------------------------------------------------------------------------
 		//Creates a frequency histogrm all pixel values 0-255
 
-		double bin_size = (MAX_INTESITY + 1) / bin_count;
+		double bin_size = (MAX_INTESITY + 1) / bin_count; //Gets the size of the bins using MAX_INTENSITY which changes based on if the imags is 16 or 8 bit
 
-		cl::Kernel kernel_simple_histogram = cl::Kernel(program, "int_hist");
-		kernel_simple_histogram.setArg(0, device_image_input);
-		kernel_simple_histogram.setArg(1, device_int_histogram);
-		kernel_simple_histogram.setArg(2, bin_size);
+		cl::Kernel kernel_simple_histogram = cl::Kernel(program, "int_hist"); //Creates a new instance of the "int_hist" kernel function
+		kernel_simple_histogram.setArg(0, device_image_input); //Sets the first argument as the location of the image in memory
+		kernel_simple_histogram.setArg(1, device_int_histogram);// Sets the second argument as the location of the histogram in memory
+		kernel_simple_histogram.setArg(2, bin_size); // Sets the third argument as the size of bins
 		
-		cl::Event hist_event;
-		queue.enqueueNDRangeKernel(kernel_simple_histogram, cl::NullRange, cl::NDRange(image_input.size()), cl::NullRange, NULL, &hist_event);
-		queue.enqueueReadBuffer(device_int_histogram, CL_TRUE, 0, local_size, &Histogram[0]);
+		cl::Event hist_event; // used for profiling the kernel function
+		queue.enqueueNDRangeKernel(kernel_simple_histogram, cl::NullRange, cl::NDRange(image_input.size()), cl::NullRange, NULL, &hist_event); //Queue the function
+		queue.enqueueReadBuffer(device_int_histogram, CL_TRUE, 0, local_size, &Histogram[0]); //Read the output of the function to memoery
 
 		std::cout << "Histogram done" << std::endl;
 
 		//-------------------------------------------------------------------------------------------
 		//Cumulative histogram 
 		std::vector<type> CumHistogram(bin_count);												
-		queue.enqueueFillBuffer(device_cumulative_histogram_output, 0, 0, local_size);
+		queue.enqueueFillBuffer(device_cumulative_histogram_output, 0, 0, local_size); //Creates buffer as the size of the histogram
 
-		cl::Kernel kernel_cumulative_histogram = cl::Kernel(program, "cum_hist");
-		kernel_cumulative_histogram.setArg(0, device_int_histogram);
+		cl::Kernel kernel_cumulative_histogram = cl::Kernel(program, "cum_hist"); // Creates a new instance of the "cum_hist" kernel function
+		kernel_cumulative_histogram.setArg(0, device_int_histogram); //
 		kernel_cumulative_histogram.setArg(1, device_cumulative_histogram_output);
 
 		cl::Event cumulative_hist_event;
