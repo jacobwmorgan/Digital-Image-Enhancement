@@ -35,6 +35,35 @@ void print_help() {
 	std::cerr << "  -h : print this message" << std::endl;
 }
 
+
+int get_bins(bool is16bit)
+{
+	string userCommand;
+	int bin_count;
+	//Menu for asking how many bins 
+		 // This is the amount of bins Il be using for the standard histogram, this will effect the amount of colours etc in the output image, as normalisation takes place.
+	int requiredInput;
+	if (is16bit) { requiredInput = 65536; }
+	else { requiredInput = 256; };
+	std::cout << "Enter number of bins | Maximum "<<requiredInput << std::endl;
+	while (true)
+	{
+		getline(std::cin, userCommand);
+		if (userCommand == "")
+		{
+			std::cout << "Please enter a number " << std::endl;
+			continue;
+		}
+		try { bin_count = std::stoi(userCommand); }
+		catch (...) { std::cout << "Please enter a number" << std::endl; continue; }
+
+		if (bin_count >= 0 && bin_count <= requiredInput) { break; }
+		else {std::cout << "Input a number between 0-"<<requiredInput<<std::endl; continue;}
+	}
+	return bin_count;
+
+}
+
 int main(int argc, char** argv) {
 	
 	int platform_id = 0;
@@ -50,25 +79,8 @@ int main(int argc, char** argv) {
 	}
 
 	cimg::exception_mode(0);
-	string userCommand;
-	int bin_count; // This is the amount of bins Il be using for the standard histogram, this will effect the amount of colours etc in the output image, as normalisation takes place.
-	std::cout << "Enter number of bins | 256 for 8-bit" << std::endl;
+
 	//---------------------------------------------------------------------------------
-	//Menu for asking how many bins 
-	while (true)
-	{
-		getline(std::cin, userCommand);
-		if (userCommand == "")
-		{
-			std::cout << "Please enter a number " << std::endl;
-			continue;
-		}
-		try { bin_count = std::stoi(userCommand); }
-		catch (...) { std::cout << "Please enter a number" << std::endl; continue; }
-		
-		if (bin_count >= 0 && bin_count <= 256) { break; }
-		else { std::cout << "Input a number between 0-256" << std::endl; continue; }
-	}
 
 
 	//detect any potential exceptions
@@ -95,19 +107,18 @@ int main(int argc, char** argv) {
 			MAX_INTENSITY = 65535;
 		}
 
-		CImgDisplay disp_input = displayImage(temp_image, is16Bit);
 		bool is_RGB = false; //This is to check later on if i need to put the colours back in or not
 		if (temp_image.spectrum() == 1) // spectrum() Checks how many channels there are in the image (Greyscale has one)
 		
 		{
 			//This doesnt really do anything but set the image we want to use as the temp image
-			std::cout << "Gray scale image" << std::endl;
+			std::cout << "Image is Gray scale" << std::endl;
 			image_input = temp_image;
 			is_RGB = false;
 		}
 		else if (temp_image.spectrum() == 3) // (RGB has 3)
 		{
-			std::cout << "RGB image" << std::endl;
+			std::cout << "Image is RGB" << std::endl;
 			is_RGB = true;
 
 			CImg<imageT> Ycbcr_Image = temp_image.get_RGBtoYCbCr(); //Converts the RGB image into a YCbCr image. YCbCr is preferred as it is designed for digital images
@@ -118,8 +129,9 @@ int main(int argc, char** argv) {
 		}
 
 
+		int bin_count = get_bins(is16Bit);
 
-
+		CImgDisplay disp_input = displayImage(image_input, is16Bit);
 
 		const int IMAGE_SIZE = image_input.size();
 		
@@ -157,7 +169,6 @@ int main(int argc, char** argv) {
 
 		size_t local_size = Histogram.size() * sizeof(type); //Gets the size in bytes
 
-
 		//Setting histogram bin size based the size of the image
 		//Device Buffers
 		cl::Buffer device_image_input(context, CL_MEM_READ_ONLY, image_input.size() * sizeof(imageT));
@@ -193,13 +204,13 @@ int main(int argc, char** argv) {
 		std::vector<type> CumHistogram(bin_count);												
 		queue.enqueueFillBuffer(device_cumulative_histogram_output, 0, 0, local_size); //Creates buffer as the size of the histogram
 
-		cl::Kernel kernel_cumulative_histogram = cl::Kernel(program, "cum_hist"); // Creates a new instance of the "cum_hist" kernel function
+		cl::Kernel kernel_cumulative_histogram = cl::Kernel(program, "inclusive_hillis_steele"); // Creates a new instance of the "cum_hist" kernel function
 		kernel_cumulative_histogram.setArg(0, device_int_histogram); //inputing histogram 
 		kernel_cumulative_histogram.setArg(1, device_cumulative_histogram_output); //output to the bufffer
 
 		cl::Event cumulative_hist_event;
 
-		queue.enqueueNDRangeKernel(kernel_cumulative_histogram, cl::NullRange, cl::NDRange(local_size), cl::NullRange, NULL, &cumulative_hist_event);
+		queue.enqueueNDRangeKernel(kernel_cumulative_histogram, cl::NullRange, cl::NDRange(CumHistogram.size()), cl::NullRange, NULL, &cumulative_hist_event);
 		queue.enqueueReadBuffer(device_cumulative_histogram_output, CL_TRUE, 0, local_size, &CumHistogram[0]);
 
 		std::cout << "cum Histogram done" << std::endl;
