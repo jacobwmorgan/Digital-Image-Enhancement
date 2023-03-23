@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
 
 		int bin_count = get_bins(is16Bit);
 
-		CImgDisplay disp_input = displayImage(image_input, is16Bit);
+		CImgDisplay disp_input = displayImage(temp_image, is16Bit);
 
 		const int IMAGE_SIZE = image_input.size();
 		
@@ -286,7 +286,7 @@ int main(int argc, char** argv) {
 			{
 				for (int y = 0; y < temp_image.height(); y++)
 				{
-					RGBImg(x, y, 0) = output_image(x, y);
+					RGBImg(x, y, 0) = output_image(x, y); 
 					RGBImg(x, y, 1) = cb(x, y);
 					RGBImg(x, y, 2) = cr(x, y);
 				}
