@@ -229,7 +229,7 @@ int main(int argc, char** argv) {
 
 		cl::Event lut_event;
 
-		queue.enqueueNDRangeKernel(kernel_LUT, cl::NullRange, cl::NDRange(local_size), cl::NullRange, NULL, &lut_event);
+		queue.enqueueNDRangeKernel(kernel_LUT, cl::NullRange, cl::NDRange(LUT.size()), cl::NullRange, NULL, &lut_event);
 		queue.enqueueReadBuffer(device_LUT_output, CL_TRUE, 0, local_size , &LUT[0]);
 
 		std::cout << "LUT DONE" << std::endl;
