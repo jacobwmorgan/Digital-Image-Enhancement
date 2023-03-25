@@ -270,25 +270,32 @@ int main(int argc, char** argv) {
 		//------------------------------------------------------------------------------------------
 		//Outputs
 
+
+		int histo_time = hist_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - hist_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+		int cum_time = cumulative_hist_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - cumulative_hist_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+		int lut_time = lut_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - lut_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+		int backprop_time = back_projection_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - back_projection_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+		int overall_time = histo_time + cum_time + lut_time + backprop_time;
+
 		std::cout << std::endl;
 		std::cout << "Histogram: " << Histogram << std::endl;
-		std::cout << "Histogram kernel execution time [ns]: " << hist_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - hist_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "Histogram kernel execution time [ns]: " << histo_time << std::endl;
 		std::cout << "Histogram memory transfer: " << GetFullProfilingInfo(hist_event, ProfilingResolution::PROF_US) << std::endl << std::endl;;
 
 		std::cout << "Cumulative Histogram: " << CumHistogram << std::endl;
-		std::cout << "Cumulative Histogram kernel execution time [ns]: " << cumulative_hist_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - cumulative_hist_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "Cumulative Histogram kernel execution time [ns]: " << cum_time << std::endl;
 		std::cout << "Cumulative Histogram memory transfer: " << GetFullProfilingInfo(cumulative_hist_event, ProfilingResolution::PROF_US) << std::endl << std::endl;;
 
 
 		std::cout << "Look-up table (LUT): " << LUT << std::endl;
-		std::cout << "LUT kernel execution time [ns]: " << lut_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - lut_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "LUT kernel execution time [ns]: " << lut_time << std::endl;
 		std::cout << "LUT memory transfer: " << GetFullProfilingInfo(lut_event, ProfilingResolution::PROF_US) << std::endl << std::endl;;
 
 
-		std::cout << "Vector kernel execution time [ns]: " << back_projection_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - back_projection_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "Vector kernel execution time [ns]: " << backprop_time << std::endl;
 		std::cout << "Vector memory transfer: " << GetFullProfilingInfo(back_projection_event, ProfilingResolution::PROF_US) << std::endl;
 		std::cout << std::endl;
-		std::cout << "Overall execution time [ns]:  " << back_projection_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - hist_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() << std::endl;
+		std::cout << "Overall execution time [ns]:  " << overall_time << std::endl;
 
 
 
