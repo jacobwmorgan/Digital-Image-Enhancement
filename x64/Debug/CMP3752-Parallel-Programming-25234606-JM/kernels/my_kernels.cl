@@ -45,7 +45,7 @@ kernel void inclusive_hillis_steele(global int* A, global int* B)
 	C = A; A = B; B = C;
 }
 
-kernel void blelloch_scan(global int* A)
+kernel void blelloch_scan(global int* A, global int* B)
 {
 	int id = get_global_id(0);
 	int N = get_global_size(0); int t;
@@ -69,6 +69,7 @@ kernel void blelloch_scan(global int* A)
 		}
 		barrier(CLK_GLOBAL_MEM_FENCE);
 	}
+	B[id] = A[id];
 }
 
 

@@ -7,10 +7,16 @@
 using namespace cimg_library;
 
 
-typedef  unsigned short imageT;
+typedef  unsigned short imageT; //This type is used to store the image later on,  its a  short so  it can handel both 16 and 8 bit 
 
 CImgDisplay displayImage(CImg<imageT> im, bool is16Bit)
 {
+	/*
+		Handles 16 bit and makes sure the image is displayed in the correct type,  eg char or short , short for 16 bit and  char for  8bit 
+
+		sets the output as  "disp_input" ,return it so it can be displayed by open cl
+
+	*/
 	if (is16Bit == false)
 	{
 		CImg<unsigned char> output_image = (CImg<imageT>) im;
@@ -26,6 +32,13 @@ CImgDisplay displayImage(CImg<imageT> im, bool is16Bit)
 
 
 void print_help() {
+	/*
+		Options  displayed by typing -h in conjunction with running the program in  the command  line  
+
+		This is from the tutorials provided in the workshops
+		Can be found here https://github.com/wing8/OpenCL-Tutorials
+	
+	*/
 	std::cerr << "Application usage:" << std::endl;
 
 	std::cerr << "  -p : select platform " << std::endl;
@@ -38,12 +51,18 @@ void print_help() {
 
 int get_bins(bool is16bit)
 {
+	/*
+		Menu for asking how many bins 
+		This is the amount of bins Il be using for the standard histogram, this will effect the amount of colours etc in the output image, as normalisation takes place.
+		
+		65536 is the max intensity for a 16 bit image (2^16)
+		256 is the max intensity for an 8 bit image (2^8)
+	*/
 	string userCommand;
 	int bin_count;
-	//Menu for asking how many bins 
-		 // This is the amount of bins Il be using for the standard histogram, this will effect the amount of colours etc in the output image, as normalisation takes place.
+
 	int requiredInput;
-	if (is16bit) { requiredInput = 65536; }
+	if (is16bit) { requiredInput = 65536; }  
 	else { requiredInput = 256; };
 	std::cout << "Enter number of bins | Maximum "<<requiredInput << std::endl;
 	while (true)
@@ -61,16 +80,17 @@ int get_bins(bool is16bit)
 		else {std::cout << "Input a number between 0-"<<requiredInput<<std::endl; continue;}
 	}
 	return bin_count;
-
 }
 
 int main(int argc, char** argv) {
 	
-	int platform_id = 0;
+	int platform_id = 0; 
 	int device_id = 0;
 	string image_filename = "test.pgm"; //Image name that is being read in (Can be changed in the options)
 
-	for (int i = 1; i < argc; i++) {
+	// Checks what argument is passed in command line
+	for (int i = 1; i < argc; i++) 
+	{
 		if ((strcmp(argv[i], "-p") == 0) && (i < (argc - 1))) { platform_id = atoi(argv[++i]); }
 		else if ((strcmp(argv[i], "-d") == 0) && (i < (argc - 1))) { device_id = atoi(argv[++i]); }
 		else if (strcmp(argv[i], "-l") == 0) { std::cout << ListPlatformsDevices() << std::endl; }
@@ -86,9 +106,9 @@ int main(int argc, char** argv) {
 	//detect any potential exceptions
 	try {
 
-		CImg<imageT> image_input; 
+		CImg<imageT> image_input; //Creates image using the custom type
 
-		int MAX_INTENSITY;
+		int MAX_INTENSITY; 
 		bool is16Bit;
 
 		CImg<imageT> temp_image(image_filename.c_str()); //A temporary storage for the image , as if RGB is used , I will need this image later on to input into the changed image, so i can put the colour back into the image
@@ -98,13 +118,13 @@ int main(int argc, char** argv) {
 		{
 			std::cout << "Image is 8-bit" << std::endl;
 			is16Bit = false;
-			MAX_INTENSITY = 255;
+			MAX_INTENSITY = 255; //Sets the intensity according to an 8bit image
 		}
 		else if (temp_image.max() <= 65535) // 2^16 -1
 		{
 			std::cout << "Image is 16-bit" << std::endl;
 			is16Bit = true;
-			MAX_INTENSITY = 65535;
+			MAX_INTENSITY = 65535; //Sets the intensity according to an 16bit image
 		}
 
 		bool is_RGB = false; //This is to check later on if i need to put the colours back in or not
@@ -123,17 +143,17 @@ int main(int argc, char** argv) {
 
 			CImg<imageT> Ycbcr_Image = temp_image.get_RGBtoYCbCr(); //Converts the RGB image into a YCbCr image. YCbCr is preferred as it is designed for digital images
 			
-			image_input = Ycbcr_Image.get_channel(0); //
-			cb = Ycbcr_Image.get_channel(1);
-			cr = Ycbcr_Image.get_channel(2);
+			image_input = Ycbcr_Image.get_channel(0);// The first channel is the luminocity of the image, this is what we will be working on, since we are making the image more "intense"
+			cb = Ycbcr_Image.get_channel(1); // "Blue-difference" chroma
+			cr = Ycbcr_Image.get_channel(2); // "Red-difference" chroma
 		}
 
 
 		int bin_count = get_bins(is16Bit);
 
-		CImgDisplay disp_input = displayImage(temp_image, is16Bit);
+		CImgDisplay disp_input = displayImage(temp_image, is16Bit); //Displays the image inputted
 
-		const int IMAGE_SIZE = image_input.size();
+		const int IMAGE_SIZE = image_input.size(); 
 		
 
 		//3.1 Select computing devices
@@ -197,34 +217,32 @@ int main(int argc, char** argv) {
 		queue.enqueueNDRangeKernel(kernel_simple_histogram, cl::NullRange, cl::NDRange(image_input.size()), cl::NullRange, NULL, &hist_event); //Queue the function
 		queue.enqueueReadBuffer(device_int_histogram, CL_TRUE, 0, local_size, &Histogram[0]); //Read the output of the function to memoery
 
-		std::cout << "Histogram done" << std::endl;
 
 		//-------------------------------------------------------------------------------------------
 		//Cumulative histogram 
 		std::vector<type> CumHistogram(bin_count);												
 		queue.enqueueFillBuffer(device_cumulative_histogram_output, 0, 0, local_size); //Creates buffer as the size of the histogram
-
-		cl::Kernel kernel_cumulative_histogram = cl::Kernel(program, "inclusive_hillis_steele"); // Creates a new instance of the "cum_hist" kernel function
+		// I made multiple functions for this
+		// cum_hist, inclusive_hillis_steele ,blelloch_scan
+		cl::Kernel kernel_cumulative_histogram = cl::Kernel(program, "inclusive_hillis_steele"); // Creates a new instance of the cumulative_histogram kernel function
 		kernel_cumulative_histogram.setArg(0, device_int_histogram); //inputing histogram 
-		kernel_cumulative_histogram.setArg(1, device_cumulative_histogram_output); //output to the bufffer
+		kernel_cumulative_histogram.setArg(1, device_cumulative_histogram_output); //output to the buffer
 
 		cl::Event cumulative_hist_event;
 
-		queue.enqueueNDRangeKernel(kernel_cumulative_histogram, cl::NullRange, cl::NDRange(CumHistogram.size()), cl::NullRange, NULL, &cumulative_hist_event);
-		queue.enqueueReadBuffer(device_cumulative_histogram_output, CL_TRUE, 0, local_size, &CumHistogram[0]);
-
-		std::cout << "cum Histogram done" << std::endl;
+		queue.enqueueNDRangeKernel(kernel_cumulative_histogram, cl::NullRange, cl::NDRange(CumHistogram.size()), cl::NullRange, NULL, &cumulative_hist_event); // queues and runs the kernel in the buffer
+		queue.enqueueReadBuffer(device_cumulative_histogram_output, CL_TRUE, 0, local_size, &CumHistogram[0]); // reads the buffer
 		//------------------------------------------------------------------------------------------
 		//Look up table 
 
 		std::vector<type> LUT(bin_count);
 
-		queue.enqueueFillBuffer(device_LUT_output,0,0,local_size);
+		queue.enqueueFillBuffer(device_LUT_output,0,0,local_size); //creates buffer for look up table
 
-		cl::Kernel kernel_LUT = cl::Kernel(program, "hist_lut");
-		kernel_LUT.setArg(0, device_cumulative_histogram_output);
-		kernel_LUT.setArg(1, device_LUT_output);
-		kernel_LUT.setArg(2, bin_count);
+		cl::Kernel kernel_LUT = cl::Kernel(program, "hist_lut"); // Creates instance of "hist_lut"
+		kernel_LUT.setArg(0, device_cumulative_histogram_output); //inputs the cumulative histogram into the kernel function
+		kernel_LUT.setArg(1, device_LUT_output); 
+		kernel_LUT.setArg(2, bin_count); 
 		kernel_LUT.setArg(3, MAX_INTENSITY);
 
 		cl::Event lut_event;
@@ -232,7 +250,6 @@ int main(int argc, char** argv) {
 		queue.enqueueNDRangeKernel(kernel_LUT, cl::NullRange, cl::NDRange(LUT.size()), cl::NullRange, NULL, &lut_event);
 		queue.enqueueReadBuffer(device_LUT_output, CL_TRUE, 0, local_size , &LUT[0]);
 
-		std::cout << "LUT DONE" << std::endl;
 
 		//------------------------------------------------------------------------------------------
 		//Back projection
@@ -249,7 +266,7 @@ int main(int argc, char** argv) {
 		queue.enqueueNDRangeKernel(kernel_back_projection, cl::NullRange, cl::NDRange(image_input.size()), cl::NullRange, NULL, &back_projection_event);
 
 		queue.enqueueReadBuffer(device_image_output, CL_TRUE, 0, output_buffer.size(), &output_buffer.data()[0]);
-		std::cout << "BACK DONE" << std::endl;
+
 		//------------------------------------------------------------------------------------------
 		//Outputs
 
@@ -279,26 +296,26 @@ int main(int argc, char** argv) {
 
 		CImg<imageT> output_image(output_buffer.data(), image_input.width(), image_input.height(), image_input.depth(), image_input.spectrum());
 		//RGB Output handling
-		if (is_RGB == true)
+		if (is_RGB == true) // Checks if the image inputted is RGB
 		{
 			CImg<imageT> RGBImg = output_image.get_resize(temp_image.width(),temp_image.height(),temp_image.depth(), temp_image.spectrum());
 			for (int x = 0; x < temp_image.width(); x++)
 			{
 				for (int y = 0; y < temp_image.height(); y++)
 				{
-					RGBImg(x, y, 0) = output_image(x, y); 
-					RGBImg(x, y, 1) = cb(x, y);
+					RGBImg(x, y, 0) = output_image(x, y); //Changes first channel to the image worked out using kernel functions
+					RGBImg(x, y, 1) = cb(x, y); // Next two lines put the colour back into the image
 					RGBImg(x, y, 2) = cr(x, y);
 				}
 			}
 			
-			output_image = RGBImg.get_YCbCrtoRGB();
+			output_image = RGBImg.get_YCbCrtoRGB(); //Converts ycbcr back into rgb
 		}
 		
 		
 
 
-		CImgDisplay disp_output = displayImage(output_image, is16Bit);
+		CImgDisplay disp_output = displayImage(output_image, is16Bit); // Displays the image
 
 		while (!disp_input.is_closed() && !disp_output.is_closed()
 			&& !disp_input.is_keyESC() && !disp_output.is_keyESC())
